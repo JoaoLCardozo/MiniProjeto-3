@@ -1,82 +1,164 @@
+import random
 import threading
 import time
-import queue
-import random
+from queue import Queue
+import matplotlib.pyplot as plt
+import pandas as pd
 
-# Parâmetros da simulação
-BUFFER_CAPACITY = 10
-NUM_PRODUCERS = 2
-NUM_CONSUMERS = 3
-NUM_TIMESTEPS = 100
+# Classes básicas
+class ClientRequest:
+    def _init_(self, request_id, request_type):
+        self.id = request_id
+        self.type = request_type  # "Technical" or "Sales"
 
-# Buffer (fila limitada)
-buffer = queue.Queue(BUFFER_CAPACITY)
+class Attendant:
+    def _init_(self, attendant_id, attendant_type):
+        self.id = attendant_id
+        self.type = attendant_type
+        self.active = True
 
-# Semáforos
-space_available = threading.Semaphore(BUFFER_CAPACITY)  # Espaço disponível para produtores
-items_available = threading.Semaphore(0)  # Itens disponíveis para consumidores
-buffer_lock = threading.Lock()  # Mutex para sincronizar acesso ao buffer
+    def process_request(self, request):
+        if not self.active:
+            raise Exception("Inactive attendant cannot process requests")
+        time.sleep(0.1)  # Simulate processing time
+        return f"Request {request.id} processed by {self.type} Attendant {self.id}"
 
-# Variáveis de relatório e de controle
-produced_count = 0
-consumed_count = 0
-terminate = False  # Variável de controle para encerrar as threads
+class Server:
+    def _init_(self, server_id, capacity):
+        self.id = server_id
+        self.capacity = capacity
+        self.attendants = []
+        self.lock = threading.Lock()
 
-# Função do produtor
-def producer(id):
-    global produced_count, terminate
-    for _ in range(NUM_TIMESTEPS):
-        if terminate:
-            break
-        # Aguarda espaço disponível no buffer
-        space_available.acquire()
-        with buffer_lock:
-            item = f"Item-{produced_count + 1}"
-            buffer.put(item)
-            produced_count += 1
-            print(f"Produtor {id} produziu: {item}")
-        # Sinaliza que um item foi adicionado
-        items_available.release()
-        time.sleep(random.uniform(0.1, 0.5))  # Simula tempo de produção
+    def add_attendant(self, attendant):
+        with self.lock:
+            self.attendants.append(attendant)
 
-    # Sinaliza para encerrar após terminar
-    terminate = True
+    def remove_attendant(self, attendant_id):
+        with self.lock:
+            self.attendants = [a for a in self.attendants if a.id != attendant_id]
 
-# Função do consumidor
-def consumer(id):
-    global consumed_count, terminate
-    while not terminate or not buffer.empty():
-        # Aguarda por itens disponíveis no buffer
-        items_available.acquire()
-        with buffer_lock:
-            if not buffer.empty():
-                item = buffer.get()
-                consumed_count += 1
-                print(f"Consumidor {id} consumiu: {item}")
-                # Sinaliza que um espaço foi liberado
-                space_available.release()
-        time.sleep(random.uniform(0.1, 0.5))  # Simula tempo de consumo
+    def get_active_attendants(self, attendant_type):
+        with self.lock:
+            return [a for a in self.attendants if a.type == attendant_type and a.active]
 
-# Criação das threads de produtores e consumidores
-producers = [threading.Thread(target=producer, args=(i+1,)) for i in range(NUM_PRODUCERS)]
-consumers = [threading.Thread(target=consumer, args=(i+1,)) for i in range(NUM_CONSUMERS)]
+class Supervisor:
+    def _init_(self):
+        self.servers = []
+        self.logs = []
 
-# Inicia as threads
-for p in producers:
-    p.start()
-for c in consumers:
-    c.start()
+    def add_server(self, server):
+        self.servers.append(server)
 
-# Aguarda o término das threads de produtores
-for p in producers:
-    p.join()
+    def monitor_and_reallocate(self, request, attendant_type):
+        for server in self.servers:
+            active_attendants = server.get_active_attendants(attendant_type)
+            if active_attendants:
+                attendant = random.choice(active_attendants)
+                return attendant.process_request(request)
+        return f"Request {request.id} could not be processed due to lack of attendants."
 
-# Aguardar que todos os consumidores finalizem após o término dos produtores
-for c in consumers:
-    c.join()
+class FailureSimulator:
+    def _init_(self, servers):
+        self.servers = servers
 
-# Exibe o relatório final
-print("\n=== Relatório Final ===")
-print(f"Total de itens produzidos: {produced_count}")
-print(f"Total de itens consumidos: {consumed_count}")
-print(f"Status final do buffer: {buffer.qsize()} itens restantes")
+    def inject_failures(self, probability=0.1):
+        for server in self.servers:
+            for attendant in server.attendants:
+                if random.random() < probability:
+                    attendant.active = False
+
+class RequestGenerator:
+    def _init_(self):
+        self.counter = 0
+
+    def generate_requests(self, num_requests):
+        requests = []
+        for _ in range(num_requests):
+            request_type = random.choice(["Technical", "Sales"])
+            self.counter += 1
+            requests.append(ClientRequest(self.counter, request_type))
+        return requests
+
+# Simulação
+def simulation():
+    # Configuração inicial
+    supervisor = Supervisor()
+    request_generator = RequestGenerator()
+    servers = [
+        Server("A", 5),
+        Server("B", 7),
+        Server("C", 10)
+    ]
+    for i, server in enumerate(servers):
+        # Adiciona atendentes aleatórios a cada servidor
+        for _ in range(server.capacity):
+            attendant_type = random.choice(["Technical", "Sales"])
+            server.add_attendant(Attendant(f"{server.id}-{random.randint(100, 999)}", attendant_type))
+        supervisor.add_server(server)
+
+    failure_simulator = FailureSimulator(servers)
+
+    # Logs para análise
+    total_requests = []
+    processed_requests = 0
+    failed_requests = 0
+
+    # Buffer
+    buffer = Queue(maxsize=50)
+
+    for timestep in range(100):  # Simulação de 100 timesteps
+        print(f"Timestep {timestep + 1}")
+
+        # Geração de novas solicitações
+        new_requests = request_generator.generate_requests(random.randint(10, 20))
+        for request in new_requests:
+            if not buffer.full():
+                buffer.put(request)
+            else:
+                print("Buffer overflow! Terminating simulation.")
+                failed_requests += buffer.qsize()
+                return processed_requests, failed_requests
+
+        # Simulação de falhas
+        failure_simulator.inject_failures()
+
+        # Processamento das solicitações no buffer
+        current_buffer_size = buffer.qsize()
+        for _ in range(current_buffer_size):
+            request = buffer.get()
+            result = supervisor.monitor_and_reallocate(request, request.type)
+            if "could not be processed" in result:
+                failed_requests += 1
+            else:
+                processed_requests += 1
+                print(result)
+
+        # Log do timestep
+        total_requests.append({
+            "Timestep": timestep + 1,
+            "Processed Requests": processed_requests,
+            "Failed Requests": failed_requests,
+            "Buffer Size": buffer.qsize()
+        })
+
+    # Retorno dos logs
+    return total_requests
+
+# Execução da simulação
+logs = simulation()
+
+# Análise de resultados
+df = pd.DataFrame(logs)
+print(df)
+
+# Gráficos
+plt.figure(figsize=(10, 6))
+plt.plot(df["Timestep"], df["Processed Requests"], label="Processed Requests", color="green")
+plt.plot(df["Timestep"], df["Failed Requests"], label="Failed Requests", color="red")
+plt.xlabel("Timestep")
+plt.ylabel("Number of Requests")
+plt.title("System Performance Over Time")
+plt.legend()
+plt.grid()
+plt.show()
