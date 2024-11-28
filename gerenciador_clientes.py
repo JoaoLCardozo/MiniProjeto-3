@@ -6,103 +6,103 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Classes básicas
-class ClientRequest:
-    def _init_(self, request_id, request_type):
-        self.id = request_id
-        self.type = request_type  # "Technical" or "Sales"
+class SolicitaçãoCliente:
+    def __init__(self, id_solicitacao, tipo_solicitacao):
+        self.id = id_solicitacao
+        self.tipo = tipo_solicitacao  # "Técnica" ou "Vendas"
 
-class Attendant:
-    def _init_(self, attendant_id, attendant_type):
-        self.id = attendant_id
-        self.type = attendant_type
-        self.active = True
+class Atendente:
+    def __init__(self, id_atendente, tipo_atendente):
+        self.id = id_atendente
+        self.tipo = tipo_atendente
+        self.ativo = True
 
-    def process_request(self, request):
-        if not self.active:
-            raise Exception("Inactive attendant cannot process requests")
-        time.sleep(0.1)  # Simulate processing time
-        return f"Request {request.id} processed by {self.type} Attendant {self.id}"
+    def processar_solicitacao(self, solicitacao):
+        if not self.ativo:
+            raise Exception("Atendente inativo não pode processar solicitações")
+        time.sleep(0.1)  # Simula o tempo de processamento
+        return f"Solicitação {solicitacao.id} processada por Atendente {self.id} ({self.tipo})"
 
-class Server:
-    def _init_(self, server_id, capacity):
-        self.id = server_id
-        self.capacity = capacity
-        self.attendants = []
+class Servidor:
+    def __init__(self, id_servidor, capacidade):
+        self.id = id_servidor
+        self.capacidade = capacidade
+        self.atendentes = []
         self.lock = threading.Lock()
 
-    def add_attendant(self, attendant):
+    def adicionar_atendente(self, atendente):
         with self.lock:
-            self.attendants.append(attendant)
+            self.atendentes.append(atendente)
 
-    def remove_attendant(self, attendant_id):
+    def remover_atendente(self, id_atendente):
         with self.lock:
-            self.attendants = [a for a in self.attendants if a.id != attendant_id]
+            self.atendentes = [a for a in self.atendentes if a.id != id_atendente]
 
-    def get_active_attendants(self, attendant_type):
+    def obter_atendentes_ativos(self, tipo_atendente):
         with self.lock:
-            return [a for a in self.attendants if a.type == attendant_type and a.active]
+            return [a for a in self.atendentes if a.tipo == tipo_atendente and a.ativo]
 
 class Supervisor:
-    def _init_(self):
-        self.servers = []
+    def __init__(self):
+        self.servidores = []
         self.logs = []
 
-    def add_server(self, server):
-        self.servers.append(server)
+    def adicionar_servidor(self, servidor):
+        self.servidores.append(servidor)
 
-    def monitor_and_reallocate(self, request, attendant_type):
-        for server in self.servers:
-            active_attendants = server.get_active_attendants(attendant_type)
-            if active_attendants:
-                attendant = random.choice(active_attendants)
-                return attendant.process_request(request)
-        return f"Request {request.id} could not be processed due to lack of attendants."
+    def monitorar_e_realocar(self, solicitacao, tipo_atendente):
+        for servidor in self.servidores:
+            atendentes_ativos = servidor.obter_atendentes_ativos(tipo_atendente)
+            if atendentes_ativos:
+                atendente = random.choice(atendentes_ativos)
+                return atendente.processar_solicitacao(solicitacao)
+        return f"Solicitação {solicitacao.id} não pôde ser processada devido à falta de atendentes."
 
-class FailureSimulator:
-    def _init_(self, servers):
-        self.servers = servers
+class SimuladorFalhas:
+    def __init__(self, servidores):
+        self.servidores = servidores
 
-    def inject_failures(self, probability=0.1):
-        for server in self.servers:
-            for attendant in server.attendants:
-                if random.random() < probability:
-                    attendant.active = False
+    def injetar_falhas(self, probabilidade=0.1):
+        for servidor in self.servidores:
+            for atendente in servidor.atendentes:
+                if random.random() < probabilidade:
+                    atendente.ativo = False
 
-class RequestGenerator:
-    def _init_(self):
-        self.counter = 0
+class GeradorSolicitacoes:
+    def __init__(self):
+        self.contador = 0
 
-    def generate_requests(self, num_requests):
-        requests = []
-        for _ in range(num_requests):
-            request_type = random.choice(["Technical", "Sales"])
-            self.counter += 1
-            requests.append(ClientRequest(self.counter, request_type))
-        return requests
+    def gerar_solicitacoes(self, num_solicitacoes):
+        solicitacoes = []
+        for _ in range(num_solicitacoes):
+            tipo_solicitacao = random.choice(["Técnica", "Vendas"])
+            self.contador += 1
+            solicitacoes.append(SolicitaçãoCliente(self.contador, tipo_solicitacao))
+        return solicitacoes
 
 # Simulação
-def simulation():
+def simulacao():
     # Configuração inicial
     supervisor = Supervisor()
-    request_generator = RequestGenerator()
-    servers = [
-        Server("A", 5),
-        Server("B", 7),
-        Server("C", 10)
+    gerador_solicitacoes = GeradorSolicitacoes()
+    servidores = [
+        Servidor("A", 5),
+        Servidor("B", 7),
+        Servidor("C", 10)
     ]
-    for i, server in enumerate(servers):
+    for i, servidor in enumerate(servidores):
         # Adiciona atendentes aleatórios a cada servidor
-        for _ in range(server.capacity):
-            attendant_type = random.choice(["Technical", "Sales"])
-            server.add_attendant(Attendant(f"{server.id}-{random.randint(100, 999)}", attendant_type))
-        supervisor.add_server(server)
+        for _ in range(servidor.capacidade):
+            tipo_atendente = random.choice(["Técnica", "Vendas"])
+            servidor.adicionar_atendente(Atendente(f"{servidor.id}-{random.randint(100, 999)}", tipo_atendente))
+        supervisor.adicionar_servidor(servidor)
 
-    failure_simulator = FailureSimulator(servers)
+    simulador_falhas = SimuladorFalhas(servidores)
 
     # Logs para análise
-    total_requests = []
-    processed_requests = 0
-    failed_requests = 0
+    total_solicitacoes = []
+    solicitacoes_processadas = 0
+    solicitacoes_falhadas = 0
 
     # Buffer
     buffer = Queue(maxsize=50)
@@ -111,42 +111,42 @@ def simulation():
         print(f"Timestep {timestep + 1}")
 
         # Geração de novas solicitações
-        new_requests = request_generator.generate_requests(random.randint(10, 20))
-        for request in new_requests:
+        novas_solicitacoes = gerador_solicitacoes.gerar_solicitacoes(random.randint(10, 20))
+        for solicitacao in novas_solicitacoes:
             if not buffer.full():
-                buffer.put(request)
+                buffer.put(solicitacao)
             else:
-                print("Buffer overflow! Terminating simulation.")
-                failed_requests += buffer.qsize()
-                return processed_requests, failed_requests
+                print("Overflow do buffer! Terminando simulação.")
+                solicitacoes_falhadas += buffer.qsize()
+                return solicitacoes_processadas, solicitacoes_falhadas
 
         # Simulação de falhas
-        failure_simulator.inject_failures()
+        simulador_falhas.injetar_falhas()
 
         # Processamento das solicitações no buffer
-        current_buffer_size = buffer.qsize()
-        for _ in range(current_buffer_size):
-            request = buffer.get()
-            result = supervisor.monitor_and_reallocate(request, request.type)
-            if "could not be processed" in result:
-                failed_requests += 1
+        tamanho_buffer_atual = buffer.qsize()
+        for _ in range(tamanho_buffer_atual):
+            solicitacao = buffer.get()
+            resultado = supervisor.monitorar_e_realocar(solicitacao, solicitacao.tipo)
+            if "não pôde ser processada" in resultado:
+                solicitacoes_falhadas += 1
             else:
-                processed_requests += 1
-                print(result)
+                solicitacoes_processadas += 1
+                print(resultado)
 
         # Log do timestep
-        total_requests.append({
+        total_solicitacoes.append({
             "Timestep": timestep + 1,
-            "Processed Requests": processed_requests,
-            "Failed Requests": failed_requests,
-            "Buffer Size": buffer.qsize()
+            "Solicitações Processadas": solicitacoes_processadas,
+            "Solicitações Falhadas": solicitacoes_falhadas,
+            "Tamanho do Buffer": buffer.qsize()
         })
 
     # Retorno dos logs
-    return total_requests
+    return total_solicitacoes
 
 # Execução da simulação
-logs = simulation()
+logs = simulacao()
 
 # Análise de resultados
 df = pd.DataFrame(logs)
@@ -154,11 +154,11 @@ print(df)
 
 # Gráficos
 plt.figure(figsize=(10, 6))
-plt.plot(df["Timestep"], df["Processed Requests"], label="Processed Requests", color="green")
-plt.plot(df["Timestep"], df["Failed Requests"], label="Failed Requests", color="red")
+plt.plot(df["Timestep"], df["Solicitações Processadas"], label="Solicitações Processadas", color="green")
+plt.plot(df["Timestep"], df["Solicitações Falhadas"], label="Solicitações Falhadas", color="red")
 plt.xlabel("Timestep")
-plt.ylabel("Number of Requests")
-plt.title("System Performance Over Time")
+plt.ylabel("Número de Solicitações")
+plt.title("Desempenho do Sistema ao Longo do Tempo")
 plt.legend()
 plt.grid()
 plt.show()
